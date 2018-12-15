@@ -1,0 +1,217 @@
+#lang racket
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+;; Florian Myter          ;;
+;; Software Languages lab ;;
+;; fmyter@vub.ac.be       ;;
+;;;;;;;;;;;;;;;;;;;;;;;;;;;;
+(require "../FullAPI/Z21MessageSysStat.rkt" "../FullAPI/Z21MessageSettings.rkt" "../FullAPI/Z21MessageDriving.rkt" "../FullAPI/Z21MessageLocation.rkt" "../FullAPI/Z21MessageSwitches.rkt" "../FullAPI/Z21MessageDecoderCV.rkt"  "../FullAPI/racket-bits-utils-master/bits.rkt")
+(provide handle-msg)
+
+(define (handle-msg msg)
+  (cond
+    ;System status return messages
+    ((is-serial-answer? msg) (handle-serial-answer msg))
+    ((is-x-bus-answer? msg) (handle-x-bus msg))
+    ((is-status-changed-msg? msg) (handle-status-changed msg))
+    ((is-bc-track-power-off-msg? msg) (handle-power-off msg))
+    ((is-bc-track-power-on-msg? msg) (handle-power-on msg))
+    ((is-unknown-command-msg? msg) (handle-unknown))
+    ((is-bc-stopped-msg? msg) (handle-stop))
+    ((is-firmware-answer? msg) (handle-firmware msg))
+    ((is-get-broadcast-answer? msg) (handle-broadcast-flags msg))
+    ((is-system-state-changed-msg? msg) (handle-state-change msg))
+    ;Settings return messages
+    ((is-get-loco-mode-answer? msg) (handle-loco-mode msg))
+    ;Driving return messages
+    ((is-loco-info-msg? msg) (handle-loco-info msg))
+    ;Switch return messages
+    ((is-switch-info-msg? msg) (handle-switch-info msg))
+    ;CV return messages
+    ((is-cv-nack-sc-msg? msg) (handle-cv-nack-sc))
+    ((is-cv-nack-msg? msg) (handle-cv-nack))
+    ((is-cv-result-msg? msg) (handle-cv-result msg))
+    ;Location return messages
+    ((is-rmbus-datachanged-msg? msg) (handle-location-changed-msg msg))
+    (else (begin (display "Unknown message") (display (byte->hex-string (bytes-ref msg 0))) (newline) (newline)))
+    ))
+
+(define (handle-serial-answer msg)
+  (display (string-append "SERIAL ANSWER: " (number->string (get-serial-number msg))))
+  (newline)
+  (newline))
+
+(define (handle-x-bus msg)
+  (display "X-BUS ANSWER => ")
+  (newline)
+  (display (string-append "X-BUS VERSION: " (number->string (get-x-bus-version msg))))
+  (newline)
+  (display (string-append "X-BUS CENTRAL: " (symbol->string (get-x-bus-central msg))))
+  (newline)
+  (newline))
+
+(define (handle-status-changed msg)
+  (display "STATUS CHANGED => ")
+  (newline)
+  (display (string-append "EMERGENCY?: " (format "~a" (is-emergency-status-msg? msg))))
+  (newline)
+  (display (string-append "VOLTAGE OFF?: " (format "~a" (is-voltage-off-status-msg? msg))))
+  (newline)
+  (display (string-append "SHORT CIRCUIT?: " (format "~a" (is-short-circuit-status-msg? msg))))
+  (newline)
+  (display (string-append "PROGRAMMING MODE?: " (format "~a" (is-programming-mode-status-msg? msg))))
+  (newline)
+  (newline))
+
+(define (handle-power-off msg)
+  (display "TRACK POWER HAS BEEN TURNED OFF")
+  (newline)
+  (newline))
+
+(define (handle-power-on msg)
+  (display "TRACK POWER HAS BEEN TURNED ON")
+  (newline)
+  (newline))
+
+(define (handle-unknown)
+  (display "Z21 received unknown command")
+  (newline)
+  (newline))
+
+(define (handle-stop)
+  (display "ALL TRAFFIC HAS BEEN STOPPED")
+  (newline)
+  (newline))
+  
+(define (handle-firmware msg)
+  (display (string-append "FIRMWARE ANSWER: " (get-firmware-version msg)))
+  (newline)
+  (newline))
+
+(define (handle-broadcast-flags msg)
+  (display (string-append "GET BROADCAST ANSWER: " (format "~a" (get-broadcast-flags msg))))
+  (newline)
+  (newline))
+
+(define (handle-state-change msg)
+  (display "Z21 STATE CHANGED => ")
+  (newline)
+  (display (string-append "CURRENT ON MAIN TRACK: " (number->string (get-system-state-main-current msg))))
+  (newline)
+  (display (string-append "CURRENT ON PROG TRACK: " (number->string (get-system-state-prog-current msg))))
+  (newline)
+  (display (string-append "FILTERED CURRENT: " (number->string (get-system-state-filtered-current msg))))
+  (newline)
+  (display (string-append "SYSTEM TEMPERATURE: " (number->string (get-system-state-temperature msg))))
+  (newline)
+  (display (string-append "SUPPLY VOLTAGE: " (number->string (get-system-state-supply-voltage msg))))
+  (newline)
+  (display (string-append "VCC VOLTAGE: " (number->string (get-system-state-vcc-voltage msg))))
+  (newline)
+  (display (string-append "EMERGENCY?: " (format "~a" (is-system-state-emergency? msg))))
+  (newline)
+  (display (string-append "VOLTAGE OFF?: " (format "~a" (is-system-state-voltage-off? msg))))
+  (newline)
+  (display (string-append "SHORT CIRCUIT?: " (format "~a" (is-system-state-short-circuit? msg))))
+  (newline)
+  (display (string-append "PROGRAMMING MODE?: " (format "~a" (is-system-state-programming-mode? msg))))
+  (newline)
+  (display (string-append "TEMP TOO HIGH?: " (format "~a" (is-system-stateex-temp-high? msg))))
+  (newline)
+  (display (string-append "POWER LOST?: " (format "~a" (is-system-stateex-power-lost? msg))))
+  (newline)
+  (display (string-append "EXTERNAL SHORT CIRCUIT?: " (format "~a" (is-system-stateex-short-circuit-ex? msg))))
+  (newline)
+  (display (string-append "INTERNAL SHORT CIRCUIT?: " (format "~a" (is-system-stateex-short-circuit-in? msg))))
+  (newline)
+  (newline))
+
+(define (handle-loco-mode msg)
+  (let
+      ([dcc (is-dcc-loco-mode? msg)]
+       [mm  (is-mm-loco-mode? msg)]
+       [add (number->string (get-loco-mode-address msg))])
+    (cond
+      (dcc  (display (string-append "LOCO MODE ANSWER: DCC" " FOR LOC WITH ADDRESS: " add)))
+      (mm   (display (string-append "LOCO MODE ANSWER: MM" "FOR LOC WITH ADDRESS: " add)))
+      (else (display (string-append "LOCO MODE ANSWER: UNKNOWN" "FOR LOC WITH ADDRESS: " add))))))
+
+;Prints the status of the loc functions (we assume that the loc has 22 functions)
+(define (print-loc-info-functions msg i)
+  (when (not (= i 23))
+    (begin 
+      (display (string-append "LOC FUNCTION " (number->string i) " ON? : " (format "~a" (loco-info-func-on? msg i))))
+      (newline)
+      (print-loc-info-functions msg (+ i 1)))))
+
+(define (handle-loco-info msg)
+  (display "LOCO INFO => ")
+  (newline)
+  (display (string-append "LOC ADDRESS: " (number->string (get-loco-info-address msg))))
+  (newline)
+  (display (string-append "LOC BUSY? : " (format "~a" (loco-info-busy? msg))))
+  (newline)
+  (display (string-append "LOC SPEED RANGE: " (number->string (get-loco-info-speed-range msg))))
+  (newline)
+  (display (string-append "LOC FORWARD?: " (format "~a" (get-loco-info-forward? msg))))
+  (newline)
+  (display (string-append "LOC SPEED: " (number->string (get-loco-info-speed msg))))
+  (newline)
+  (display (string-append "LOC DOPPELTRACTION? : " (format "~a" (loco-info-doppeltraction? msg))))
+  (newline)
+  (display (string-append "LOC SMARTSEARCH? : " (format "~a" (loco-info-smartsearch? msg))))
+  (newline)
+  (print-loc-info-functions msg 0)
+  (newline))
+
+(define (handle-switch-info msg)
+  (display "SWITCH INFO =>")
+  (newline)
+  (display (string-append "SWITCH ADDRESS: " (number->string (get-switch-info-address msg))))
+  (newline)
+  (display (string-append "SWITCH POSITION: " (number->string (get-switch-info-position msg))))
+  (newline)
+  (newline))
+
+(define (handle-cv-nack-sc)
+  (display "CV NACK SC")
+  (newline)
+  (newline))
+
+(define (handle-cv-nack)
+  (display "CV NACK")
+  (newline)
+  (newline))
+
+(define (handle-cv-result msg)
+  (display "CV RESULT => ")
+  (newline)
+  (display (string-append "CV ADDRESS: " (number->string (get-cv-result-address msg))))
+  (newline)
+  (display (string-append "CV VALUE: " (number->string (get-cv-result-result msg))))
+  (newline)
+  (newline))
+
+(define (handle-location-changed-msg msg)
+  (display "LOCATION INFO => ")
+  (newline)
+  (display (string-append "GROUP INDEX: " (number->string (get-rmbus-data-group-index msg))))
+  (newline)
+  (print-module-location-info (get-rmbus-data msg))
+  (newline))
+
+(define (print-module-location-info data)
+  (when (not (empty? data))
+    (begin
+      (display (string-append "INFO FOR MODULE: " (number->string (get-module (car data)))))
+      (newline)
+      (print-occ-location-info (get-occupancies (car data)))
+      (newline)
+      (print-module-location-info (cdr data)))))
+
+(define (print-occ-location-info occ-info)
+  (when (not (empty? occ-info))
+    (begin
+      (display (string-append "PORT OCCUPIED: " (number->string (car occ-info))))
+      (newline)
+      (print-occ-location-info (cdr occ-info)))))
+

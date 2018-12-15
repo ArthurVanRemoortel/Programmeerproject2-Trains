@@ -1,0 +1,1 @@
+("6.10.1" ("d0cb1a80b76d1279ba78b909be07ab6451204028" . "7a0ed76264c03f8a9f6f8c3444741d476f16ceef") (collects #"data" #"queue.rkt") (collects #"racket" #"main.rkt") (collects #"racket" #"runtime-config.rkt") (collects #"racket" #"udp.rkt"))
